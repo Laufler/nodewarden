@@ -291,11 +291,11 @@ export async function buildAccountPasskeyPrfKeySet(
   }
   const rawId = new Uint8Array(pending.deviceResponse.rawId);
   const assertionOptions: PublicKeyCredentialRequestOptions = {
-    challenge: pending.createOptions?.challenge!,
+    challenge: toArrayBuffer(crypto.getRandomValues(new Uint8Array(32))),
     rpId: pending.createOptions?.rp?.id,
     allowCredentials: [{ id: toArrayBuffer(rawId), type: 'public-key' }],
-    timeout: pending.createOptions?.timeout,
-    userVerification: pending.createOptions?.authenticatorSelection?.userVerification,
+    timeout: pending.createOptions?.timeout ?? 60_000,
+    userVerification: pending.createOptions?.authenticatorSelection?.userVerification ?? 'required',
   };
   const assertion = await getPublicKeyCredentialWithPrf(
     assertionOptions,

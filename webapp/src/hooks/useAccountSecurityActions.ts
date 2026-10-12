@@ -101,6 +101,27 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
         });
       }
 
+      function confirmPrfVerification(): Promise<boolean> {
+        return new Promise((resolve) => {
+          let settled = false;
+          const finish = (shouldVerify: boolean) => {
+            if (settled) return;
+            settled = true;
+            onSetConfirm(null);
+            resolve(shouldVerify);
+          };
+          onSetConfirm({
+            title: t('txt_account_passkey_prf_verify_title'),
+            message: t('txt_account_passkey_prf_verify_message'),
+            confirmText: t('txt_account_passkey_prf_verify_confirm'),
+            cancelText: t('txt_account_passkey_prf_verify_cancel'),
+            showIcon: true,
+            onConfirm: () => finish(true),
+            onCancel: () => finish(false),
+          });
+        });
+      }
+
       return ({
       async changePassword(currentPassword: string, nextPassword: string, nextPassword2: string) {
         if (!profile) return;
@@ -356,19 +377,26 @@ export default function useAccountSecurityActions(options: UseAccountSecurityAct
         let savedWithoutDirectUnlock = false;
         if (directUnlock) {
           if (!session?.symEncKey || !session?.symMacKey) throw new Error(t('txt_vault_key_unavailable'));
-          try {
-            keySet = await buildAccountPasskeyPrfKeySet(pending, {
-              symEncKey: session.symEncKey,
-              symMacKey: session.symMacKey,
-            });
-          } catch (error) {
-            if (!(error instanceof AccountPasskeyPrfUnavailableError)) throw error;
-            const shouldSaveLoginOnly = await confirmSaveLoginOnlyAccountPasskey();
-            if (!shouldSaveLoginOnly) {
-              onNotify('warning', t('txt_account_passkey_not_saved'));
-              return null;
-            }
+          const shouldVerifyPrf = await confirmPrfVerification();
+          if (!shouldVerifyPrf) {
             savedWithoutDirectUnlock = true;
+          } else {
+            try {
+              keySet = await buildAccountPasskeyPrfKeySet(pending, {
+                symEncKey: session.symEncKey,
+                symMacKey: session.symMacKey,
+              });
+            } catch (error) {
+              if (!(error instanceof AccountPasskeyPrfUnavailableError)) {
+                console.error('account passkey PRF assertion failed', error);
+              }
+              const shouldSaveLoginOnly = await confirmSaveLoginOnlyAccountPasskey();
+              if (!shouldSaveLoginOnly) {
+                onNotify('warning', t('txt_account_passkey_not_saved'));
+                return null;
+              }
+              savedWithoutDirectUnlock = true;
+            }
           }
         }
         const credential = await saveAccountPasskey(authedFetch, {
